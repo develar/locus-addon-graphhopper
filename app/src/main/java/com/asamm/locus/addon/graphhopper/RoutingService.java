@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
-
 import com.graphhopper.GHRequest;
 import com.graphhopper.GHResponse;
 import com.graphhopper.GraphHopper;
@@ -15,22 +14,9 @@ import com.graphhopper.routing.util.FlagEncoderFactory;
 import com.graphhopper.routing.weighting.FastestWeighting;
 import com.graphhopper.routing.weighting.ShortestWeighting;
 import com.graphhopper.routing.weighting.Weighting;
-import com.graphhopper.util.Instruction;
-import com.graphhopper.util.Parameters;
-import com.graphhopper.util.PointList;
-import com.graphhopper.util.RoundaboutInstruction;
-import com.graphhopper.util.StopWatch;
-import com.graphhopper.util.ViaInstruction;
+import com.graphhopper.storage.CHProfile;
+import com.graphhopper.util.*;
 import com.graphhopper.util.shapes.GHPoint;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import locus.api.android.features.computeTrack.ComputeTrackParameters;
 import locus.api.android.features.computeTrack.ComputeTrackService;
 import locus.api.android.utils.LocusUtils;
@@ -40,6 +26,14 @@ import locus.api.objects.extra.Location;
 import locus.api.objects.extra.Track;
 import locus.api.objects.extra.Waypoint;
 import locus.api.utils.Logger;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Created by menion on 9. 7. 2014.
@@ -79,7 +73,7 @@ public class RoutingService extends ComputeTrackService {
 
         // load encoders
         EncodingManager em = getGraphHooper().getEncodingManager();
-		List<Weighting> weightings = getGraphHooper().getCHFactoryDecorator().getWeightings();
+		    List<CHProfile> profiles = getGraphHooper().getCHFactoryDecorator().getCHProfiles();
         List<Integer> types = new ArrayList<>();
 
         // get all encoders
@@ -90,15 +84,16 @@ public class RoutingService extends ComputeTrackService {
             switch (encType) {
                 case FlagEncoderFactory.CAR:
                 	boolean carAdded = false;
-                	for (Weighting weighting : weightings) {
-						if (weighting instanceof FastestWeighting) {
-							addTrackType(GeoDataExtra.VALUE_RTE_TYPE_CAR_FAST, types);
-							carAdded = true;
-						} else if (weighting instanceof ShortestWeighting) {
-							addTrackType(GeoDataExtra.VALUE_RTE_TYPE_CAR_SHORT, types);
-							carAdded = true;
-						}
-					}
+                	for (CHProfile profile : profiles) {
+                    Weighting weighting = profile.getWeighting();
+                    if (weighting instanceof FastestWeighting) {
+                      addTrackType(GeoDataExtra.VALUE_RTE_TYPE_CAR_FAST, types);
+                      carAdded = true;
+                    } else if (weighting instanceof ShortestWeighting) {
+                      addTrackType(GeoDataExtra.VALUE_RTE_TYPE_CAR_SHORT, types);
+                      carAdded = true;
+                    }
+                  }
 
 					// add basic "car" if no car type exists
 					if (!carAdded) {
@@ -111,7 +106,8 @@ public class RoutingService extends ComputeTrackService {
                 case FlagEncoderFactory.BIKE:
 				case FlagEncoderFactory.BIKE2:
                 	boolean bikeAdded = false;
-					for (Weighting weighting : weightings) {
+          for (CHProfile profile : profiles) {
+            Weighting weighting = profile.getWeighting();
 						if (weighting instanceof FastestWeighting) {
 							addTrackType(GeoDataExtra.VALUE_RTE_TYPE_CYCLE_FAST, types);
 							bikeAdded = true;
@@ -301,10 +297,8 @@ public class RoutingService extends ComputeTrackService {
 	 */
 	private void setGraphHopperProperties(GraphHopper gh, File routingItem) throws IOException {
 		// set default parameters
-		gh.setEnableInstructions(true);
+		gh.setEncodingManager(new EncodingManager.Builder().setEnableInstructions(true).build());
 		gh.setAllowWrites(false);
-		gh.setCHEnabled(false);
-		gh.setElevation(false);
 
 		// load properties file
 		byte[] filePropData = readFile(new File(routingItem, "properties"));
@@ -316,16 +310,12 @@ public class RoutingService extends ComputeTrackService {
 		// test weighting
 		Pattern patternWei = Pattern.compile("graph\\.ch\\.weightings=\\[(.*)\\]");
 		Matcher matcherWei = patternWei.matcher(fileProp);
-		if (matcherWei.find()) {
-			gh.setCHEnabled(matcherWei.group(1).length() > 0);
-		}
+    gh.setCHEnabled(matcherWei.find() && matcherWei.group(1).length() > 0);
 
 		// test elevation
 		Pattern patternEle = Pattern.compile("graph\\.dimension=(\\d)");
 		Matcher matcherEle = patternEle.matcher(fileProp);
-		if (matcherEle.find()) {
-			gh.setElevation(Integer.parseInt(matcherEle.group(1)) > 2);
-		}
+    gh.setElevation(matcherEle.find() && Integer.parseInt(matcherEle.group(1)) > 2);
 	}
 
 	/**
