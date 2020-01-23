@@ -32,8 +32,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Created by menion on 9. 7. 2014.
@@ -72,12 +70,12 @@ public class RoutingService extends ComputeTrackService {
         }
 
         // load encoders
-        EncodingManager em = getGraphHooper().getEncodingManager();
+        EncodingManager encodingManager = getGraphHooper().getEncodingManager();
 		    List<CHProfile> profiles = getGraphHooper().getCHFactoryDecorator().getCHProfiles();
         List<Integer> types = new ArrayList<>();
 
         // get all encoders
-        for (FlagEncoder enc : em.fetchEdgeEncoders()) {
+        for (FlagEncoder enc : encodingManager.fetchEdgeEncoders()) {
             String encType = enc.toString();
 
             // add car
@@ -297,7 +295,6 @@ public class RoutingService extends ComputeTrackService {
 	 */
 	private void setGraphHopperProperties(GraphHopper gh, File routingItem) throws IOException {
 		// set default parameters
-		gh.setEncodingManager(new EncodingManager.Builder().setEnableInstructions(true).build());
 		gh.setAllowWrites(false);
 
 		// load properties file
@@ -308,14 +305,14 @@ public class RoutingService extends ComputeTrackService {
 		String fileProp = new String(filePropData);
 
 		// test weighting
-		Pattern patternWei = Pattern.compile("graph\\.ch\\.weightings=\\[(.*)\\]");
-		Matcher matcherWei = patternWei.matcher(fileProp);
-    gh.setCHEnabled(matcherWei.find() && matcherWei.group(1).length() > 0);
+		if (fileProp.contains("prepare.ch.date.")) {
+      gh.setCHEnabled(true);
+    }
 
 		// test elevation
-		Pattern patternEle = Pattern.compile("graph\\.dimension=(\\d)");
-		Matcher matcherEle = patternEle.matcher(fileProp);
-    gh.setElevation(matcherEle.find() && Integer.parseInt(matcherEle.group(1)) > 2);
+    if (fileProp.contains("prepare.elevation_interpolation.done=true")) {
+      gh.setElevation(true);
+    }
 	}
 
 	/**
